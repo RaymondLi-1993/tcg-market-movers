@@ -1,12 +1,16 @@
 {
-  "name": "pokemon",
-  "version": "1.0.0",
-  "main": "index.js",
+  "name": "tcg-market-movers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Push alerts for big Pokémon TCG market moves, built for card store owners",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "db:new": "dbmate --migrations-dir db/migrations new",
+    "db:up": "dbmate --migrations-dir db/migrations --no-dump-schema up",
+    "db:down": "dbmate --migrations-dir db/migrations --no-dump-schema down",
+    "db:status": "dbmate --migrations-dir db/migrations status"
   },
-  "keywords": [],
-  "author": "",
   "license": "ISC",
-  "description": ""
+  "devDependencies": {
+    "dbmate": "^2.37.0"
+  }
 }

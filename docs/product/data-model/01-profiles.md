@@ -30,9 +30,9 @@ Supabase Auth user (id, email)  ──  profiles (user_id, timezone, alerts_enab
 
 - **Uniqueness:** `user_id` is the primary key, so each user can have only one profile.
 - **On delete: hard delete.** When a user deletes their account, the Auth user is deleted and the profile goes with it automatically (cascade). Apple requires real deletion of the account and its data. Marking it "inactive" doesn't count.
-- **When it's created:** automatically, the moment a user first signs in (the Auth user is created → a profile is created with defaults: `alerts_enabled = true`, `timezone` from the device). The app never has to remember to create it.
+- **When it's created:** by the **API**, on the user's first authenticated request ("create the profile if missing", an idempotent upsert with defaults: `alerts_enabled = true`, `timezone = 'UTC'` until the app sends the device timezone). See ADR-006.
 - **When `timezone` updates:** the app re-saves the device timezone on each app open, so travel or moving is picked up.
-- **Who can read/write:** only the user themselves (their own row), plus the worker (which reads it to decide who gets pushes). Enforced by RLS in the SQL step.
+- **Who can read/write:** only the user themselves (their own row; only `timezone` and `alerts_enabled` are editable), plus the worker (which reads it to decide who gets pushes). **Enforced in the Express API** (ADR-006). The table itself is locked to direct access (RLS on with no policies + privileges revoked), so the public anon key can't reach it.
 
 ## What we chose NOT to store (and why)
 
