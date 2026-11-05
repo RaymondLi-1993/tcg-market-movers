@@ -175,3 +175,39 @@ Short ADR-style (Architecture Decision Record) entries. Each one records what we
 - Every environment gets the same changes in the same order, tracked in `schema_migrations`.
 - The database password now sits in a local `.env`, which must never be committed.
 - Later: CI can run `db:up` against `tcg-prod` on merge to `main`.
+
+---
+
+## ADR-008: JustTCG v2 scan, and a sales-backed push rule (from real API data)
+**Date:** 2026-11-05
+**Status:** Accepted. Replaces ADR-003's push threshold (≥25%, ≥$20, trading activity). The rest of ADR-003 stands.
+
+**Context:** The first real JustTCG calls (2026-11-05, 6 requests) tested the plan's assumptions:
+- **v1** sorts by 24h change, but has no price filter. Page 1 of 31,724 cards was mostly sub-$5 cards, and only 3 of 20 were ≥$20 and ≥25%.
+- **v2 (beta)** has `min_price` and `order_by=24h`. With `min_price=20` (8,139 cards), page 1 reached +20%. `order=asc` returned the biggest drops even though the spec doesn't list it.
+- **Most big moves are thin:** of 17 cards at ≥$20 and ≥25%, none had ≥2 sales of the moved variant in 30 days. The spec confirms a missing window means zero sales. Actively traded cards moved less (18–45%).
+- Each response includes all conditions/printings (about 7 variants per card), so there's no extra cost per condition.
+- JustTCG has no images, and pokemontcg.io is deprecated.
+- Prices were ~4.5h old, and price history uses daily points, so real-time isn't achievable.
+
+**Decision:**
+- **Fetch:** v2 `GET /v2/cards` with `game=pokemon&language=English&min_price=20`, `order_by=24h` for gainers and `order_by=24h&order=asc` for drops, ~3 requests per run. Results are checked for correct ordering because `order=asc` is undocumented.
+- **Push rule:** Near Mint variant ≥$20, ≥20% in 24h either way, and ≥5 sales of Near Mint + Lightly Played copies in 30 days across all printings. Matching moves in other conditions add a "confirmed" badge but aren't required. No rarity filter. 72h cooldown per card.
+- **Schema:** a new migration adds `sales_30d` to `card_prices` and `run_cards_log`. Card-wide totals are derived, never stored.
+- **Positioning:** "real moves within a few hours", not "real-time".
+- **Images:** a separate source, probably TCGdex (to verify).
+
+**Alternatives considered:**
+- *Keep v1 only:* stable and documented, but cheap cards bury useful moves, and getting past them would blow the budget.
+- *A tracked list of active cards:* reliable, but the API can't sort by sales, and it costs ~15 requests per 300 cards per check. Not needed while the scan surfaces enough. Revisit if it doesn't.
+- *Sales of the moved variant only, or same printing only:* cleaner, but on 2026-11-05 data they left 0–1 alerts.
+- *Whole-card sales across all conditions:* inflated by Damaged/Played copies (e.g. Mewtwo: 13 card-wide, but the NM copy sold once).
+- *Raising the move threshold above 20%:* mainly removed the actively traded cards.
+- *Requiring matching moves:* matched 0 of 14 candidates.
+
+**Consequences:**
+- Depends on a beta API and one undocumented parameter. The `PriceProvider` adapter isolates the shape, and the worker validates sorting.
+- Still mixes printings (e.g. Blastoise: 11 NM+LP sales across printings, 3 in the printing that moved). Accepted for now.
+- Rules are tuned on one day of data, so recheck with `run_cards_log` after a week.
+- Expect few pushes per day, which fits quality over quantity.
+
